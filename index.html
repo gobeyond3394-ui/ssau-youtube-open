@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <meta name="referrer" content="no-referrer">
+  <meta name="theme-color" content="#ff0033">
+  <title>YouTube 앱으로 이동</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #ffffff;
+      --ink: #111827;
+      --muted: #667085;
+      --line: #e5e7eb;
+      --youtube: #ff0033;
+      --youtube-dark: #d9002b;
+      --safe-top: env(safe-area-inset-top, 0px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    * { box-sizing: border-box; }
+
+    html,
+    body {
+      width: 100%;
+      min-height: 100%;
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      min-height: 100vh;
+      min-height: 100dvh;
+      display: grid;
+      place-items: center;
+      padding: calc(24px + var(--safe-top)) 18px calc(24px + var(--safe-bottom));
+    }
+
+    .card {
+      width: min(100%, 420px);
+      padding: 28px 22px 22px;
+      border: 1px solid var(--line);
+      border-radius: 28px;
+      background: #fff;
+      box-shadow: 0 20px 48px rgba(15, 23, 42, 0.10);
+      text-align: center;
+    }
+
+    .logo {
+      width: 84px;
+      height: 84px;
+      margin: 0 auto 18px;
+      border-radius: 24px;
+      display: grid;
+      place-items: center;
+      background: var(--youtube);
+      box-shadow: 0 14px 30px rgba(255, 0, 51, 0.22);
+    }
+
+    .logo svg {
+      width: 52px;
+      height: 52px;
+      display: block;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 24px;
+      line-height: 1.25;
+      letter-spacing: -0.04em;
+      font-weight: 950;
+    }
+
+    .status {
+      min-height: 48px;
+      margin: 12px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.65;
+      font-weight: 800;
+      word-break: keep-all;
+      overflow-wrap: anywhere;
+    }
+
+    .actions {
+      margin-top: 20px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .button {
+      min-height: 56px;
+      padding: 0 16px;
+      border-radius: 18px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
+      font-size: 16px;
+      line-height: 1.2;
+      font-weight: 950;
+      -webkit-tap-highlight-color: transparent;
+      cursor: pointer;
+    }
+
+    .button.primary {
+      color: #fff;
+      background: var(--youtube);
+      border: 1px solid var(--youtube);
+    }
+
+    .button.primary:active { background: var(--youtube-dark); }
+
+    .button.secondary {
+      color: var(--ink);
+      background: #fff;
+      border: 1px solid var(--line);
+    }
+
+    .button[hidden] { display: none; }
+
+    .note {
+      margin: 16px 0 0;
+      color: #98a2b3;
+      font-size: 12px;
+      line-height: 1.6;
+      font-weight: 750;
+      word-break: keep-all;
+    }
+  </style>
+</head>
+<body>
+  <main class="card" aria-labelledby="pageTitle">
+    <div class="logo" aria-hidden="true">
+      <svg viewBox="0 0 64 64" role="img">
+        <rect x="3" y="12" width="58" height="40" rx="14" fill="#fff"></rect>
+        <path d="M27 23.5 44 32 27 40.5Z" fill="#ff0033"></path>
+      </svg>
+    </div>
+
+    <h1 id="pageTitle">YouTube 앱으로 이동 중입니다</h1>
+    <p class="status" id="statusText" aria-live="polite">잠시만 기다려 주세요.</p>
+
+    <div class="actions">
+      <a class="button primary" id="openAppButton" href="#">YouTube 앱으로 열기</a>
+      <a class="button secondary" id="openExternalButton" href="#" hidden>카카오톡 밖에서 다시 열기</a>
+      <a class="button secondary" id="openWebButton" href="https://www.youtube.com/channel/UCRLKyHLgvgjH18_eBBAZeQQ/live">웹에서 계속 보기</a>
+    </div>
+
+    <p class="note">
+      기기 또는 카카오톡 정책에 따라 자동 이동이 막히면<br>
+      ‘YouTube 앱으로 열기’를 한 번 눌러 주세요.
+    </p>
+  </main>
+
+  <script>
+    (() => {
+      'use strict';
+
+      const YOUTUBE_WEB_URL =
+        'https://www.youtube.com/channel/UCRLKyHLgvgjH18_eBBAZeQQ/live';
+
+      const YOUTUBE_HOST_AND_PATH =
+        'www.youtube.com/channel/UCRLKyHLgvgjH18_eBBAZeQQ/live';
+
+      // YouTube iOS 앱의 관행적 커스텀 스킴입니다.
+      // 실패하면 아래의 HTTPS 주소로 자동 복귀합니다.
+      const YOUTUBE_IOS_APP_URL =
+        'youtube://www.youtube.com/channel/UCRLKyHLgvgjH18_eBBAZeQQ/live';
+
+      const YOUTUBE_ANDROID_INTENT_URL =
+        'intent://' + YOUTUBE_HOST_AND_PATH +
+        '#Intent;' +
+        'scheme=https;' +
+        'package=com.google.android.youtube;' +
+        'action=android.intent.action.VIEW;' +
+        'category=android.intent.category.BROWSABLE;' +
+        'S.browser_fallback_url=' + encodeURIComponent(YOUTUBE_WEB_URL) + ';' +
+        'end';
+
+      const ua = String(navigator.userAgent || '');
+      const isAndroid = /Android/i.test(ua);
+      const isIOS = /iPhone|iPad|iPod/i.test(ua) ||
+        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      const isKakaoTalk = /KAKAOTALK/i.test(ua);
+      const isMobile = isAndroid || isIOS;
+
+      const params = new URLSearchParams(window.location.search);
+      const externalMode = params.get('external') === '1';
+
+      const statusText = document.getElementById('statusText');
+      const openAppButton = document.getElementById('openAppButton');
+      const openExternalButton = document.getElementById('openExternalButton');
+      const openWebButton = document.getElementById('openWebButton');
+
+      let fallbackTimer = 0;
+      let pageWasHidden = false;
+
+      function setStatus(message) {
+        if (statusText) statusText.textContent = message;
+      }
+
+      function clearFallbackTimer() {
+        if (fallbackTimer) {
+          window.clearTimeout(fallbackTimer);
+          fallbackTimer = 0;
+        }
+      }
+
+      function markPageHidden() {
+        pageWasHidden = true;
+        clearFallbackTimer();
+      }
+
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) markPageHidden();
+      });
+      window.addEventListener('pagehide', markPageHidden, { once: true });
+      window.addEventListener('blur', () => {
+        // 앱 전환 직전 blur만 발생하는 환경을 보조합니다.
+        if (isMobile) markPageHidden();
+      });
+
+      function getAppUrl() {
+        if (isAndroid) return YOUTUBE_ANDROID_INTENT_URL;
+        if (isIOS) return YOUTUBE_IOS_APP_URL;
+        return YOUTUBE_WEB_URL;
+      }
+
+      function buildExternalBrowserUrl() {
+        const returnUrl = new URL(window.location.href);
+        returnUrl.searchParams.set('external', '1');
+        returnUrl.searchParams.set('_ts', String(Date.now()));
+        return 'kakaotalk://web/openExternal?url=' +
+          encodeURIComponent(returnUrl.toString());
+      }
+
+      function scheduleWebFallback(delayMs) {
+        clearFallbackTimer();
+        pageWasHidden = false;
+
+        fallbackTimer = window.setTimeout(() => {
+          fallbackTimer = 0;
+          if (!pageWasHidden && !document.hidden) {
+            setStatus('앱을 열지 못해 YouTube 웹페이지로 이동합니다.');
+            window.location.replace(YOUTUBE_WEB_URL);
+          }
+        }, Math.max(900, Number(delayMs || 1800)));
+      }
+
+      function attemptAppOpen(automatic) {
+        if (!isMobile) {
+          window.location.replace(YOUTUBE_WEB_URL);
+          return;
+        }
+
+        setStatus(
+          automatic
+            ? 'YouTube 앱을 자동으로 여는 중입니다.'
+            : 'YouTube 앱을 여는 중입니다.'
+        );
+
+        scheduleWebFallback(automatic ? 1800 : 2300);
+
+        try {
+          window.location.href = getAppUrl();
+        } catch (_error) {
+          // fallback timer가 HTTPS 주소로 이동합니다.
+        }
+      }
+
+      function attemptKakaoExternalOpen() {
+        if (!isKakaoTalk || externalMode) return;
+
+        setStatus('카카오톡 밖에서 YouTube 앱을 여는 중입니다.');
+        openExternalButton.hidden = false;
+        openExternalButton.href = buildExternalBrowserUrl();
+
+        try {
+          window.location.href = openExternalButton.href;
+        } catch (_error) {
+          // 아래 안내와 수동 버튼을 유지합니다.
+        }
+
+        window.setTimeout(() => {
+          if (!document.hidden && !pageWasHidden) {
+            setStatus(
+              '자동 이동이 차단되었습니다. 아래 버튼을 한 번 눌러 주세요.'
+            );
+          }
+        }, 900);
+      }
+
+      openAppButton.href = getAppUrl();
+      openWebButton.href = YOUTUBE_WEB_URL;
+
+      // 실제 사용자 탭을 유지하기 위해 href 이동을 그대로 사용하고,
+      // 이동이 실패한 경우에만 HTTPS fallback을 실행합니다.
+      openAppButton.addEventListener('click', () => {
+        setStatus('YouTube 앱을 여는 중입니다.');
+        scheduleWebFallback(2300);
+      });
+
+      openWebButton.addEventListener('click', () => {
+        clearFallbackTimer();
+        setStatus('YouTube 웹페이지로 이동합니다.');
+      });
+
+      openExternalButton.addEventListener('click', () => {
+        clearFallbackTimer();
+        setStatus('카카오톡 밖에서 다시 여는 중입니다.');
+      });
+
+      if (isKakaoTalk && !externalMode) {
+        attemptKakaoExternalOpen();
+      } else if (isMobile) {
+        // 외부 브라우저로 넘어온 경우 앱 열기를 한 번 자동 시도합니다.
+        // 브라우저 정책상 차단되면 수동 버튼이 그대로 남습니다.
+        window.setTimeout(() => attemptAppOpen(true), 60);
+      } else {
+        setStatus('YouTube 웹페이지로 이동합니다.');
+        window.setTimeout(() => {
+          window.location.replace(YOUTUBE_WEB_URL);
+        }, 350);
+      }
+    })();
+  </script>
+</body>
+</html>
