@@ -149,7 +149,7 @@
     <div class="actions">
       <a class="button primary" id="openAppButton" href="#">YouTube 앱으로 열기</a>
       <a class="button secondary" id="openExternalButton" href="#" hidden>카카오톡 밖에서 다시 열기</a>
-      <a class="button secondary" id="openWebButton" href="https://www.youtube.com/channel/UCRLKyHLgvgjH18_eBBAZeQQ/live">웹에서 계속 보기</a>
+      <a class="button secondary" id="openWebButton" href="#">웹에서 계속 보기</a>
     </div>
 
     <p class="note">
@@ -162,16 +162,20 @@
     (() => {
       'use strict';
 
+      // 실제 YouTube 목적지는 이 한 줄만 수정하면 됩니다.
       const YOUTUBE_WEB_URL =
-        'https://www.youtube.com/@바니떼-1/live';
+        'https://www.youtube.com/channel/@바니떼-1/live';
 
+      const youtubeTargetUrl = new URL(YOUTUBE_WEB_URL);
       const YOUTUBE_HOST_AND_PATH =
-        'www.youtube.com/channel/UCRLKyHLgvgjH18_eBBAZeQQ/live';
+        youtubeTargetUrl.host +
+        youtubeTargetUrl.pathname +
+        youtubeTargetUrl.search;
 
       // YouTube iOS 앱의 관행적 커스텀 스킴입니다.
       // 실패하면 아래의 HTTPS 주소로 자동 복귀합니다.
       const YOUTUBE_IOS_APP_URL =
-        'youtube://www.youtube.com/channel/UCRLKyHLgvgjH18_eBBAZeQQ/live';
+        'youtube://' + YOUTUBE_HOST_AND_PATH;
 
       const YOUTUBE_ANDROID_INTENT_URL =
         'intent://' + YOUTUBE_HOST_AND_PATH +
