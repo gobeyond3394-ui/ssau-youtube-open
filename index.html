@@ -122,8 +122,6 @@
       border: 1px solid var(--line);
     }
 
-    .button[hidden] { display: none; }
-
     .note {
       margin: 16px 0 0;
       color: #98a2b3;
@@ -148,7 +146,7 @@
 
     <div class="actions">
       <a class="button primary" id="openAppButton" href="#">YouTube 앱으로 열기</a>
-      <a class="button secondary" id="openExternalButton" href="#" hidden>카카오톡 밖에서 다시 열기</a>
+      <a class="button secondary" id="returnShopButton" href="https://www.ssa-u.com/">싸U 쇼핑몰로 돌아가기</a>
       <a class="button secondary" id="openWebButton" href="#">웹에서 계속 보기</a>
     </div>
 
@@ -194,16 +192,46 @@
       const isKakaoTalk = /KAKAOTALK/i.test(ua);
       const isMobile = isAndroid || isIOS;
 
+      const SHOP_HOME_URL = 'https://www.ssa-u.com/';
       const params = new URLSearchParams(window.location.search);
       const externalMode = params.get('external') === '1';
 
+      function resolveSafeReturnUrl_(value) {
+        const rawReturnUrl = String(value || '').trim();
+        if (!rawReturnUrl) return SHOP_HOME_URL;
+
+        try {
+          const candidate = new URL(rawReturnUrl);
+          const isAllowed =
+            candidate.protocol === 'https:' &&
+            candidate.hostname.toLowerCase() === 'www.ssa-u.com' &&
+            !candidate.port &&
+            !candidate.username &&
+            !candidate.password;
+          return isAllowed ? candidate.href : SHOP_HOME_URL;
+        } catch (_error) {
+          return SHOP_HOME_URL;
+        }
+      }
+
+      const safeReturnUrl = resolveSafeReturnUrl_(params.get('returnUrl'));
       const statusText = document.getElementById('statusText');
       const openAppButton = document.getElementById('openAppButton');
-      const openExternalButton = document.getElementById('openExternalButton');
+      const returnShopButton = document.getElementById('returnShopButton');
       const openWebButton = document.getElementById('openWebButton');
 
       let fallbackTimer = 0;
       let pageWasHidden = false;
+
+      const AUTO_RETURN_RESUME_DELAY_MS = 220;
+      const AUTO_RETURN_ARM_TIMEOUT_MS = 10000;
+      const autoReturnState = {
+        armed: false,
+        hidden: false,
+        completed: false,
+        resumeTimer: 0,
+        armTimer: 0
+      };
 
       function setStatus(message) {
         if (statusText) statusText.textContent = message;
@@ -216,19 +244,134 @@
         }
       }
 
-      function markPageHidden() {
+      function clearAutoReturnTimers_() {
+        if (autoReturnState.resumeTimer) {
+          window.clearTimeout(autoReturnState.resumeTimer);
+          autoReturnState.resumeTimer = 0;
+        }
+        if (autoReturnState.armTimer) {
+          window.clearTimeout(autoReturnState.armTimer);
+          autoReturnState.armTimer = 0;
+        }
+      }
+
+      function cancelAutoReturn_() {
+        clearAutoReturnTimers_();
+        autoReturnState.armed = false;
+        autoReturnState.hidden = false;
+        autoReturnState.completed = false;
+      }
+
+      function armAutoReturn_() {
+        clearAutoReturnTimers_();
+        autoReturnState.armed = true;
+        autoReturnState.hidden = false;
+        autoReturnState.completed = false;
+        autoReturnState.armTimer = window.setTimeout(() => {
+          autoReturnState.armTimer = 0;
+          if (!autoReturnState.hidden && !autoReturnState.completed) {
+            cancelAutoReturn_();
+          }
+        }, AUTO_RETURN_ARM_TIMEOUT_MS);
+      }
+
+      function markAutoReturnHidden_() {
+        if (!autoReturnState.armed || autoReturnState.completed) return;
+        clearAutoReturnTimers_();
+        autoReturnState.hidden = true;
+      }
+
+      function returnToShop_() {
+        clearFallbackTimer();
+        clearAutoReturnTimers_();
+        autoReturnState.armed = false;
+        autoReturnState.hidden = false;
+        autoReturnState.completed = true;
+        setStatus('싸U 쇼핑몰로 돌아가는 중입니다.');
+
+        if (externalMode) {
+          window.location.replace(safeReturnUrl);
+          return;
+        }
+
+        const openerUrl = window.location.href;
+        try {
+          window.history.back();
+        } catch (_error) {
+          window.location.replace(safeReturnUrl);
+          return;
+        }
+
+        window.setTimeout(() => {
+          if (!document.hidden && window.location.href === openerUrl) {
+            window.location.replace(safeReturnUrl);
+          }
+        }, 700);
+      }
+
+      function maybeAutoReturnToShop_() {
+        const isVisible = !document.hidden &&
+          (!document.visibilityState || document.visibilityState === 'visible');
+        if (
+          !autoReturnState.armed ||
+          !autoReturnState.hidden ||
+          autoReturnState.completed ||
+          !isVisible ||
+          autoReturnState.resumeTimer
+        ) {
+          return;
+        }
+
+        autoReturnState.resumeTimer = window.setTimeout(() => {
+          autoReturnState.resumeTimer = 0;
+          const stillVisible = !document.hidden &&
+            (!document.visibilityState || document.visibilityState === 'visible');
+          if (
+            !autoReturnState.armed ||
+            !autoReturnState.hidden ||
+            autoReturnState.completed ||
+            !stillVisible
+          ) {
+            return;
+          }
+          autoReturnState.completed = true;
+          autoReturnState.armed = false;
+          returnToShop_();
+        }, AUTO_RETURN_RESUME_DELAY_MS);
+      }
+
+      function handleVisibilityChange_() {
+        if (document.hidden) {
+          pageWasHidden = true;
+          clearFallbackTimer();
+          markAutoReturnHidden_();
+          return;
+        }
+        maybeAutoReturnToShop_();
+      }
+
+      function handlePageHide_() {
+        pageWasHidden = true;
+        clearFallbackTimer();
+        markAutoReturnHidden_();
+      }
+
+      function handleWindowFocus_() {
+        if (!document.hidden) maybeAutoReturnToShop_();
+      }
+
+      function handleWindowBlur_() {
+        // 주소창·시스템 창에서도 blur가 발생할 수 있어 자동 복귀의 hidden 확정에는 쓰지 않습니다.
+        if (!isMobile) return;
         pageWasHidden = true;
         clearFallbackTimer();
       }
 
-      document.addEventListener('visibilitychange', () => {
-        if (document.hidden) markPageHidden();
-      });
-      window.addEventListener('pagehide', markPageHidden, { once: true });
-      window.addEventListener('blur', () => {
-        // 앱 전환 직전 blur만 발생하는 환경을 보조합니다.
-        if (isMobile) markPageHidden();
-      });
+      document.addEventListener('visibilitychange', handleVisibilityChange_);
+      window.addEventListener('pagehide', handlePageHide_);
+      window.addEventListener('pageshow', maybeAutoReturnToShop_);
+      window.addEventListener('focus', handleWindowFocus_);
+      window.addEventListener('blur', handleWindowBlur_);
 
       function getAppUrl() {
         if (isAndroid) return YOUTUBE_ANDROID_INTENT_URL;
@@ -237,11 +380,12 @@
       }
 
       function buildExternalBrowserUrl() {
-        const returnUrl = new URL(window.location.href);
-        returnUrl.searchParams.set('external', '1');
-        returnUrl.searchParams.set('_ts', String(Date.now()));
+        const externalPageUrl = new URL(window.location.href);
+        externalPageUrl.searchParams.set('external', '1');
+        externalPageUrl.searchParams.set('returnUrl', safeReturnUrl);
+        externalPageUrl.searchParams.set('_ts', String(Date.now()));
         return 'kakaotalk://web/openExternal?url=' +
-          encodeURIComponent(returnUrl.toString());
+          encodeURIComponent(externalPageUrl.toString());
       }
 
       function scheduleWebFallback(delayMs) {
@@ -251,6 +395,7 @@
         fallbackTimer = window.setTimeout(() => {
           fallbackTimer = 0;
           if (!pageWasHidden && !document.hidden) {
+            cancelAutoReturn_();
             setStatus('앱을 열지 못해 YouTube 웹페이지로 이동합니다.');
             window.location.replace(YOUTUBE_WEB_URL);
           }
@@ -259,6 +404,8 @@
 
       function attemptAppOpen(automatic) {
         if (!isMobile) {
+          cancelAutoReturn_();
+          clearFallbackTimer();
           window.location.replace(YOUTUBE_WEB_URL);
           return;
         }
@@ -269,26 +416,30 @@
             : 'YouTube 앱을 여는 중입니다.'
         );
 
+        armAutoReturn_();
         scheduleWebFallback(automatic ? 1800 : 2300);
 
         try {
           window.location.href = getAppUrl();
         } catch (_error) {
-          // fallback timer가 HTTPS 주소로 이동합니다.
+          // fallback timer가 HTTPS 주소로 이동하며 자동 복귀 대기는 해제합니다.
+          cancelAutoReturn_();
         }
       }
 
       function attemptKakaoExternalOpen() {
         if (!isKakaoTalk || externalMode) return;
 
+        const externalUrl = buildExternalBrowserUrl();
+        openAppButton.href = externalUrl;
         setStatus('카카오톡 밖에서 YouTube 앱을 여는 중입니다.');
-        openExternalButton.hidden = false;
-        openExternalButton.href = buildExternalBrowserUrl();
+        armAutoReturn_();
 
         try {
-          window.location.href = openExternalButton.href;
+          window.location.href = externalUrl;
         } catch (_error) {
-          // 아래 안내와 수동 버튼을 유지합니다.
+          cancelAutoReturn_();
+          // 자동 이동이 막혀도 첫 번째 버튼으로 다시 시도할 수 있습니다.
         }
 
         window.setTimeout(() => {
@@ -300,24 +451,42 @@
         }, 900);
       }
 
-      openAppButton.href = getAppUrl();
+      openAppButton.href = isKakaoTalk && !externalMode
+        ? buildExternalBrowserUrl()
+        : getAppUrl();
+      returnShopButton.href = safeReturnUrl;
       openWebButton.href = YOUTUBE_WEB_URL;
 
       // 실제 사용자 탭을 유지하기 위해 href 이동을 그대로 사용하고,
-      // 이동이 실패한 경우에만 HTTPS fallback을 실행합니다.
+      // 외부 브라우저에서 앱 이동이 실패한 경우에만 HTTPS fallback을 실행합니다.
       openAppButton.addEventListener('click', () => {
+        if (!isMobile) {
+          cancelAutoReturn_();
+          clearFallbackTimer();
+          setStatus('YouTube 웹페이지로 이동합니다.');
+          return;
+        }
+
+        armAutoReturn_();
+        if (isKakaoTalk && !externalMode) {
+          clearFallbackTimer();
+          setStatus('카카오톡 밖에서 YouTube 앱을 여는 중입니다.');
+          return;
+        }
+
         setStatus('YouTube 앱을 여는 중입니다.');
         scheduleWebFallback(2300);
       });
 
-      openWebButton.addEventListener('click', () => {
-        clearFallbackTimer();
-        setStatus('YouTube 웹페이지로 이동합니다.');
+      returnShopButton.addEventListener('click', (event) => {
+        event.preventDefault();
+        returnToShop_();
       });
 
-      openExternalButton.addEventListener('click', () => {
+      openWebButton.addEventListener('click', () => {
+        cancelAutoReturn_();
         clearFallbackTimer();
-        setStatus('카카오톡 밖에서 다시 여는 중입니다.');
+        setStatus('YouTube 웹페이지로 이동합니다.');
       });
 
       if (isKakaoTalk && !externalMode) {
@@ -329,6 +498,7 @@
       } else {
         setStatus('YouTube 웹페이지로 이동합니다.');
         window.setTimeout(() => {
+          cancelAutoReturn_();
           window.location.replace(YOUTUBE_WEB_URL);
         }, 350);
       }
